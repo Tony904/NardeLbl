@@ -117,6 +117,9 @@ class MainWindow(qtw.QMainWindow):
 
     def load_image_and_annotations(self, imgpath: str):
         img = cv2.imread(imgpath)
+        if img is None:
+            print(f'Failed to load file {imgpath}')
+            return
         h, w, _ = img.shape
         self.sample = Sample(imgpath, w, h)
         self.ui.lstw_bboxes.clear()
@@ -141,7 +144,7 @@ class MainWindow(qtw.QMainWindow):
         if self.sample == 0:
             self.xlog('No file loaded.\n', logging.INFO)
             return
-        txt = self.sample.path
+        txt = self.sample.txtpath()
         with open(txt, 'w') as txt:
             txt.writelines(self.sample.bboxes2lines())
         self.xlog(f'Saved annotations to {txt}', logging.INFO)
