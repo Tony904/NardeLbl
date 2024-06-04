@@ -40,9 +40,9 @@ class MainWindow(qtw.QMainWindow):
         qpix = qtg.QPixmap.fromImage(qimg)
         self.ui.lbl_display.setPixmap(qpix)
         self.files = []
-        self.sample :Sample
-        self.selected_bbox :BBox
+        self.filesi = 0
         self.classes = []
+        self.sample :Sample = None
         self.selected_class = ''
         self.imgdir = ''
         self.colors = ('red', 'green', 'blue')
@@ -67,6 +67,13 @@ class MainWindow(qtw.QMainWindow):
         self.ui.btn_save.clicked.connect(self.save_annotations)
         self.sgl_update_src.connect(self.display.set_src_and_sample)
         self.display.sgl_did_display.connect(self.update_display_pixmap)
+        self.display.sgl_bbox_updated.connect(self.update_sample_displays)
+        self.display.sgl_display_in_focus.connect(self.on_display_in_focus)
+        self.display.sgl_display_out_focus.connect(self.on_display_out_focus)
+        self.ui.cbox_class.currentIndexChanged.connect(self.on_class_changed)
+        self.display.sgl_selection_changed.connect(self.on_selection_changed)
+        self.ui.btn_next_file.clicked.connect(self.load_next_image)
+        self.ui.btn_prev_file.clicked.connect(self.load_prev_image)
 
     def _block_signals(func):
         @functools.wraps(func)
@@ -90,6 +97,11 @@ class MainWindow(qtw.QMainWindow):
     @_block_signals
     def _setText_no_signal(widget, text):
         widget.setText(str(text))
+
+    @staticmethod
+    @_block_signals
+    def _setCurrentIndex_no_signal(widget, i :int):
+        widget.setCurrentIndex(i)
 
     # --------------------------------------------------------------
     # Buttons
@@ -115,6 +127,24 @@ class MainWindow(qtw.QMainWindow):
             self.ui.lstw_files.addItem(filename)
         self.load_image_and_annotations(files[0])
 
+    def load_next_image(self):
+        if len(self.files) == 0:
+            return
+        if self.filesi == len(self.files) - 1:
+            return
+        self.filesi = self.filesi + 1
+        self.save_annotations()
+        self.load_image_and_annotations(self.files[self.filesi])
+
+    def load_prev_image(self):
+        if len(self.files) == 0:
+            return
+        if self.filesi == 0:
+            return
+        self.filesi = self.filesi - 1
+        self.save_annotations()
+        self.load_image_and_annotations(self.files[self.filesi])
+
     def load_image_and_annotations(self, imgpath: str):
         img = cv2.imread(imgpath)
         if img is None:
@@ -122,32 +152,47 @@ class MainWindow(qtw.QMainWindow):
             return
         h, w, _ = img.shape
         self.sample = Sample(imgpath, w, h)
-        self.ui.lstw_bboxes.clear()
-        self.ui.lstw_bboxes.addItems(self.sample.get_lstw_list())
+        self.sample.classes = self.classes
+        self.update_sample_displays()
         self.sgl_update_src.emit(img, self.sample)
+
+    def update_sample_displays(self):
+        self.ui.lstw_bboxes.clear()
+        if self.sample is None:
+            return
+        lst = self.sample.get_lstw_list()
+        if lst is None:
+            return
+        self.ui.lstw_bboxes.addItems(lst)
 
     @qtc.pyqtSlot()
     def load_classes_file(self):
         path, _ = qtw.QFileDialog.getOpenFileName(self, 'Select classes file', os.curdir, '*.txt')
         self.classes_file = path
         self.classes = []
+        line :str
         with open(path, 'r') as txt:
             lines = txt.readlines()
         for line in lines:
+            line = line.strip()
             if line != '' and len(line) != 0:
                 self.classes.append(line)
+        self.ui.ledit_class_file.setText(path)
         self.ui.cbox_class.clear()
         self.ui.cbox_class.addItems(self.classes)
+        if self.sample is not None:
+            self.sample.classes = self.classes
+        self.update_sample_displays()
 
     @qtc.pyqtSlot()
     def save_annotations(self):
-        if self.sample == 0:
+        if self.sample == None:
             self.xlog('No file loaded.\n', logging.INFO)
             return
-        txt = self.sample.txtpath()
-        with open(txt, 'w') as txt:
+        stxt = self.sample.txtpath()
+        with open(stxt, 'w') as txt:
             txt.writelines(self.sample.bboxes2lines())
-        self.xlog(f'Saved annotations to {txt}', logging.INFO)
+        self.xlog(f'Saved annotations to {stxt}', logging.INFO)
 
     # --------------------------------------------------------------
     # Display Loop
@@ -165,6 +210,26 @@ class MainWindow(qtw.QMainWindow):
     def on_zoom_slider_value_changed(self, v: int):
         zoom = float(v / 100.0)
         self.ui.lbl_scale.setText(f'x{zoom:.2f}')
+
+    @qtc.pyqtSlot()
+    def on_display_in_focus(self):
+        self.ui.frme_display.setFrameShape(qtw.QFrame.Shape.Box)
+
+    @qtc.pyqtSlot()
+    def on_display_out_focus(self):
+        self.ui.frme_display.setFrameShape(qtw.QFrame.Shape.StyledPanel)
+
+    @qtc.pyqtSlot(int)
+    def on_class_changed(self, i):
+        if self.sample is None:
+            return
+        self.sample.selected_class = i
+        self.update_sample_displays()
+
+    @qtc.pyqtSlot(int)
+    def on_selection_changed(self, i):
+        self._setCurrentIndex_no_signal(self.ui.cbox_class, i)
+        self.update_sample_displays()
 
     # --------------------------------------------------------------
     # Logging & Console

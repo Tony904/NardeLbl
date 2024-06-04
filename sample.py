@@ -126,39 +126,47 @@ class BBox(qtc.QObject):
         # print(f'x = {x} y = {y} retXstr = {retXstr} retYstr = {retYstr}')
         return (retXstr, retYstr)
     
-    def apply_nudge(self, nudges):
-        if nudges is None:
+    def update_box(self, shifts):
+        if shifts is None:
             return
-        if nudges[0] != 0:
+        if shifts[0] != 0:
             print('left')
             print(self.left)
-            self.left += nudges[0]
+            self.left += shifts[0]
             self.left = max(0, self.left)
             self.left = min(self.imgw, self.left)
             print(self.left)
-        elif nudges[1] != 0:
+        if shifts[1] != 0:
             print('top')
             print(self.top)
-            self.top += nudges[1]
+            self.top += shifts[1]
             self.top = max(0, self.top)
             self.top = min(self.imgh, self.top)
             print(self.top)
-        elif nudges[2] != 0:
+        if shifts[2] != 0:
             print('right')
             print(self.right)
-            self.right += nudges[2]
+            self.right += shifts[2]
             self.right = max(0, self.right)
             self.right = min(self.imgw, self.right)
             print(self.right)
-        elif nudges[3] != 0:
+        if shifts[3] != 0:
             print('bottom')
             print(self.bottom)
-            self.bottom += nudges[3]
+            self.bottom += shifts[3]
             self.bottom = max(0, self.bottom)
             self.bottom = min(self.imgh, self.bottom)
             print(self.bottom)
         print('\n')
         self.rect2yolo()
+
+    def clamp_box(self):
+        w = self.imgw
+        h = self.imgh
+        self.left = max(0, self.left)
+        self.right = min(w, self.right)
+        self.top = max(0, self.top)
+        self.bottom = min(h, self.bottom)
 
 
 
@@ -166,19 +174,51 @@ class Sample(qtc.QObject):
 
     def __init__(self, filepath: str, imgw :int, imgh :int, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.path = filepath
-        self.bboxes :list[BBox] = None
+        self.bboxes :list[BBox] = []
         self.imgw = imgw
         self.imgh = imgh
-        if os.path.exists(filepath):
+        if os.path.exists(self.txtpath()):
             self.load_bboxes()
             print(f'Successfully loaded annotations for {filepath}')
         else:
-            print(f'{filepath} does not exist.')
+            print(f'No annotations file found for {filepath}')
         self._selected_bbox :BBox = None
         self.vertex_grab_radius = 10
-        self._box_grab_percent :float = 0.5
+        self.box_grab_percent :float = 0.5
+        self.last_w = 0.05
+        self.last_h = 0.05
+        self.classes = []
+        self._selected_class = 0
+
+    @property
+    def selected_class(self):
+        return self._selected_class
+    
+    @selected_class.setter
+    def selected_class(self, x):
+        self._selected_class = x
+        if self.bbox_selected:
+            self.selected_bbox.lbl = x
+
+    def add_bbox(self, cx, cy, rel_w=None, rel_h=None):
+        if rel_w is None:
+            rel_w = self.last_w
+        if rel_h is None:
+            rel_h = self.last_h
+        bbox = BBox(self.imgw, self.imgh)
+        bbox.lbl = self.selected_class
+        bbox.cx = cx
+        bbox.cy = cy
+        bbox.w = rel_w
+        bbox.h = rel_h
+        bbox.yolo2rect()
+        bbox.clamp_box()
+        self.bboxes.append(bbox)
+        self.set_selected(bbox)
+        print(f'BBox added. {cx} {cy} {rel_w} {rel_h}')
+        return bbox
+
 
     @property
     def bbox_selected(self):
@@ -219,13 +259,20 @@ class Sample(qtc.QObject):
                 bbox.parse_yolo_line(line)
                 self.bboxes.append(bbox)
 
-    
     def get_lstw_list(self):
+        if len(self.bboxes) == 0:
+            return None
         lst = []
         for b in self.bboxes:
-            s = f'{b.lbl} {b.left} {b.right} {b.top} {b.bottom}'
+            lbl = self.class_id_to_name(b.lbl)
+            s = f'{lbl} {b.left} {b.right} {b.top} {b.bottom}'
             lst.append(s)
         return lst
+    
+    def class_id_to_name(self, id: int):
+        if len(self.classes) > 0:
+            return self.classes[id]
+        return 0
     
     def set_selected(self, bbox :BBox):
         if bbox is self._selected_bbox:
@@ -234,3 +281,17 @@ class Sample(qtc.QObject):
             self._selected_bbox._selected = False
         self._selected_bbox = bbox
         bbox._selected = True
+        self.last_w = bbox.w
+        self.last_h = bbox.h
+
+    def delete_selected(self):
+        if not self.bbox_selected:
+            print('No bbox selected.')
+            return
+        i = 0
+        for bbox in self.bboxes:
+            if bbox.selected:
+                break
+            i = i + 1
+        self.bboxes.pop(i)
+        self._selected_bbox = None
