@@ -30,6 +30,7 @@ class Display(qtc.QObject):
         self.lbl :qtw.QLabel = lbl
         self.lbl.mousePressEvent = self._mousePressEvent
         self.lbl.mouseMoveEvent = self._mouseMoveEvent
+        self.lbl.wheelEvent = self._wheelEvent
         self.lbl.keyPressEvent = self._keyPressEvent
         self.lbl.focusInEvent = self._focusInEvent
         self.lbl.focusOutEvent = self._focusOutEvent
@@ -37,6 +38,7 @@ class Display(qtc.QObject):
         self.right_clicked = False
         self.cursorX = 0
         self.cursorY = 0
+        self.wheeldelta = 0
         self.vertexStr = None
         self.keyPressed = False
         self.keyNudge = [0, 0, 0, 0]  # left, top, right, bottom
@@ -51,9 +53,23 @@ class Display(qtc.QObject):
         self.slider :qtw.QSlider = slider
         slider.setValue(100)
         self.transform: tuple[int, int, int, int, int, int, float] = (100, 100, 0, 100, 0, 100, 1.)
-        self.redraw = True
+        self.display_in_focus = False
         self.sgl_do_display.connect(self._do_display, type=qtc.Qt.ConnectionType.QueuedConnection)
         self.sgl_did_display.connect(self._do_display, type=qtc.Qt.ConnectionType.QueuedConnection)
+
+    def _wheelEvent(self, event: qtg.QWheelEvent):
+        delta = event.angleDelta().y()
+        v = 25
+        if delta > 0:
+            delta = 1
+        else:
+            delta = -1
+        v = v * delta
+        self.slider.setValue(int(self.slider.value() + v))
+        # hscroll = self.hzsb.value() + v * 2
+        # vscroll = self.vtsb.value() + v * 2
+        # self.hzsb.setValue(int(hscroll))
+        # self.vtsb.setValue(int(vscroll))
 
     def _focusInEvent(self, event :qtg.QFocusEvent):
         self.sgl_display_in_focus.emit()
@@ -108,9 +124,7 @@ class Display(qtc.QObject):
 
     def _do_display(self):
         transform = self._calculate_transform_and_set_scrollbars()
-        if not transform == self.transform:
-            self.redraw = True
-            self.transform = transform
+        self.transform = transform
         img = self._transform_src_image(transform)
         img = self._draw_boxes(img, transform)
         qimg = qtg.QImage(img.data, img.shape[1], img.shape[0], img.strides[0], qtg.QImage.Format.Format_BGR888)
