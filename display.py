@@ -39,6 +39,9 @@ class Display(qtc.QObject):
         self.cursorX = 0
         self.cursorY = 0
         self.wheeldelta = 0
+        self.vsbVal = 0
+        self.hsbVal = 0
+        self.scale = 1
         self.vertexStr = None
         self.keyPressed = False
         self.keyNudge = [0, 0, 0, 0]  # left, top, right, bottom
@@ -59,17 +62,8 @@ class Display(qtc.QObject):
 
     def _wheelEvent(self, event: qtg.QWheelEvent):
         delta = event.angleDelta().y()
-        v = 25
-        if delta > 0:
-            delta = 1
-        else:
-            delta = -1
-        v = v * delta
-        self.slider.setValue(int(self.slider.value() + v))
-        # hscroll = self.hzsb.value() + v * 2
-        # vscroll = self.vtsb.value() + v * 2
-        # self.hzsb.setValue(int(hscroll))
-        # self.vtsb.setValue(int(vscroll))
+        delta = delta / abs(delta)
+        self.wheeldelta = delta
 
     def _focusInEvent(self, event :qtg.QFocusEvent):
         self.sgl_display_in_focus.emit()
@@ -324,17 +318,37 @@ class Display(qtc.QObject):
     
     def _calculate_transform_and_set_scrollbars(self) -> tuple[int, int, int, int, int, int, float]:
         h, w, _ = self.src.shape
+        wheeldelta = self.wheeldelta
+        self.wheeldelta = 0
+        wheelMag = 25
+        if self.scale < 1.25:
+            wheelMag = 5
+        self.slider.setValue(int(self.slider.value() + wheeldelta * wheelMag))
         scale: float = self.slider.value() / 100.0
         scaled_h: int = int(h * scale)
         scaled_w: int = int(w * scale)
         canvas_h: int = self.lbl.height()
         canvas_w: int = self.lbl.width()
-        self.vtsb.setMaximum(max(0, scaled_h - canvas_h))
-        self.hzsb.setMaximum(max(0, scaled_w - canvas_w))
-        if self.vtsb.value() > self.vtsb.maximum():
-            self.vtsb.setValue(self.vtsb.maximum())
-        if self.hzsb.value() > self.hzsb.maximum():
-            self.hzsb.setValue(self.hzsb.maximum())
+        scale_changed = self.scale != scale
+        if scale_changed:
+            hsbRatio = self.hzsb.value() / max(1, self.hzsb.maximum())
+            vsbRatio = self.vtsb.value() / max(1, self.vtsb.maximum())
+            print(hsbRatio, vsbRatio)
+        newVtMax = max(0, scaled_h - canvas_h)
+        newHzMax = max(0, scaled_w - canvas_w)
+        if self.vtsb.value() > newVtMax:
+            self.vtsb.setValue(newVtMax)
+            self.vtsb.setMaximum(newVtMax)
+        elif scale_changed:
+            self.vtsb.setMaximum(newVtMax)
+            self.vtsb.setValue(round(newVtMax * vsbRatio))
+        if self.hzsb.value() > newHzMax:
+            self.hzsb.setValue(newHzMax)
+            self.hzsb.setMaximum(newHzMax)
+        elif scale_changed:
+            self.hzsb.setMaximum(newHzMax)
+            self.hzsb.setValue(round(newHzMax * hsbRatio))
+        self.scale = scale
         y1: int = self.vtsb.value()
         x1: int = self.hzsb.value()
         y2: int = y1 + min(canvas_h, scaled_h)
