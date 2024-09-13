@@ -1,7 +1,7 @@
-import copy
 import logging
 import cv2
 import numpy as np
+import math
 from PyQt6 import QtCore as qtc
 from PyQt6 import QtGui as qtg
 from PyQt6 import QtWidgets as qtw
@@ -34,14 +34,19 @@ class Display(qtc.QObject):
         self.lbl.keyPressEvent = self._keyPressEvent
         self.lbl.focusInEvent = self._focusInEvent
         self.lbl.focusOutEvent = self._focusOutEvent
+        self.lbl.mouseReleaseEvent = self._mouseReleaseEvent
         self.click_coords = None  # (mouse x, mouse y)
         self.right_clicked = False
+        self.right_click_held = False
         self.cursorX = 0
         self.cursorY = 0
+        self.cursorXdelta = 0
+        self.cursorYdelta = 0
         self.wheeldelta = 0
         self.vsbVal = 0
         self.hsbVal = 0
         self.scale = 1
+        self.color = (0, 0, 255)  # red
         self.vertexStr = None
         self.keyPressed = False
         self.keyNudge = [0, 0, 0, 0]  # left, top, right, bottom
@@ -69,6 +74,7 @@ class Display(qtc.QObject):
         self.sgl_display_in_focus.emit()
 
     def _focusOutEvent(self, event :qtg.QFocusEvent):
+        self.right_click_held = False
         self.sgl_display_out_focus.emit()
 
     def _mousePressEvent(self, event :qtg.QMouseEvent):
@@ -77,15 +83,29 @@ class Display(qtc.QObject):
             self.right_clicked = False
             self.xlog(f'click_coords set to ({event.pos().x()}, {event.pos().y()})')
             return
-        if event.button() == qtc.Qt.MouseButton.RightButton:
+        elif event.button() == qtc.Qt.MouseButton.RightButton:
             self.click_coords = None
             self.right_clicked = True
+            self.right_click_held = True
             self.xlog(f'click_coords set to None.')
             return
+        
+    def _mouseReleaseEvent(self, event :qtg.QMouseEvent):
+        if event.button() == qtc.Qt.MouseButton.RightButton:
+            print('Right mouse released.')
+            self.right_click_held = False
+            self.cursorXdelta = 0
+            self.cursorYdelta = 0
 
     def _mouseMoveEvent(self, event :qtg.QMouseEvent):
-        self.cursorX = event.pos().x()
-        self.cursorY = event.pos().y()
+        x = event.pos().x()
+        y = event.pos().y()
+        if self.right_click_held:
+            self.cursorXdelta = x - self.cursorX
+            self.cursorYdelta = y - self.cursorY
+        self.cursorX = x
+        self.cursorY = y
+        
 
     def _keyPressEvent(self, event :qtg.QKeyEvent):
         print(f'Key pressed: {event.key()}')
@@ -128,7 +148,7 @@ class Display(qtc.QObject):
     def _draw_boxes(self, img: np.ndarray, transform: tuple[int, int, int, int, int, int, float]) -> np.ndarray:
         precrop_h, precrop_w, y1, y2, x1, x2, scale = transform
         img_h, img_w, _ = img.shape
-        color = (0, 0, 255)  # red
+        color = self.color
         curX = self.cursorX
         curY = self.cursorY
         adjustedCurX = round((curX + x1) / scale)
@@ -245,9 +265,9 @@ class Display(qtc.QObject):
                                     self.sample.set_selected(bbox)
                                     self.sgl_selection_changed.emit(bbox.lbl)
             if bbox.selected:
-                color = (0, 255, 0)
+                color = (0, 255, 0)  # green
             else:
-                color = (0, 0, 255)
+                color = self.color
             cv2.rectangle(img, (left, top), (right, bottom), color, rect_thickness)
             if box_clicked:
                 self.xlog(f'Box selected: {self.sample.selected_bbox.lbl} (mouse x, y = {clickX}, {clickY})')
@@ -333,7 +353,11 @@ class Display(qtc.QObject):
         if scale_changed:
             hsbRatio = self.hzsb.value() / max(1, self.hzsb.maximum())
             vsbRatio = self.vtsb.value() / max(1, self.vtsb.maximum())
-            print(hsbRatio, vsbRatio)
+        if self.right_click_held:
+            self.vtsb.setValue(self.vtsb.value() - self.cursorYdelta)
+            self.hzsb.setValue(self.hzsb.value() - self.cursorXdelta)
+            self.cursorXdelta = 0
+            self.cursorYdelta = 0
         newVtMax = max(0, scaled_h - canvas_h)
         newHzMax = max(0, scaled_w - canvas_w)
         if self.vtsb.value() > newVtMax:

@@ -1,7 +1,7 @@
-import os
 from PyQt6 import QtCore as qtc
 from PyQt6 import QtGui as qtg
 from PyQt6 import QtWidgets as qtw
+import os
 
 
 class BBox(qtc.QObject):

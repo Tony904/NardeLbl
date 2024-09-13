@@ -355,7 +355,8 @@ class Ui_MainWindow(object):
         self.label_4.setText(_translate("MainWindow", "R"))
         self._lbl_controls.setText(_translate("MainWindow", "Controls"))
         self.label_9.setText(_translate("MainWindow", "Left Click - Select Box"))
-        self.label_10.setText(_translate("MainWindow", "Right Click - Deselect"))
+        self.label_10.setText(_translate("MainWindow", "Right Click - Deselect\n"
+"Hold & Drag - Pan"))
 
 
 if __name__ == "__main__":

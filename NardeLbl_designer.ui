@@ -611,7 +611,8 @@ Delete Selected Box</string>
           <item row="2" column="0" colspan="3">
            <widget class="QLabel" name="label_10">
             <property name="text">
-             <string>Right Click - Deselect</string>
+             <string>Right Click - Deselect
+Hold &amp; Drag - Pan</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignCenter</set>

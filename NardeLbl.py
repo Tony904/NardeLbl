@@ -1,15 +1,15 @@
-import glob
 from PyQt6 import QtCore as qtc
 from PyQt6 import QtGui as qtg
 from PyQt6 import QtWidgets as qtw
+import glob
 import cv2
 import numpy as np
-from NardeLbl_designer import Ui_MainWindow as UiMain
+import sys
+import os
 import functools
 import logging
-import sys
+from NardeLbl_designer import Ui_MainWindow as UiMain
 from display import *
-import os
 from sample import *
 
 
@@ -45,9 +45,11 @@ class MainWindow(qtw.QMainWindow):
         self.sample :Sample = None
         self.selected_class = ''
         self.imgdir = ''
-        self.colors = ('red', 'green', 'blue')
-        self.selected_color = self.colors[0]
-        self.ui.cbox_box_color.addItems(self.colors)
+        self.colors = {
+            'red'   :   (0, 0, 255), 
+            'blue'  :   (255, 0, 0)
+        }
+        self.ui.cbox_box_color.addItems(self.colors.keys())
 
         lbl = self.ui.lbl_display
         slider = self.ui.hsldr_scale
@@ -74,6 +76,8 @@ class MainWindow(qtw.QMainWindow):
         self.display.sgl_selection_changed.connect(self.on_selection_changed)
         self.ui.btn_next_file.clicked.connect(self.load_next_image)
         self.ui.btn_prev_file.clicked.connect(self.load_prev_image)
+        self.ui.lstw_files.itemClicked.connect(self.load_clicked_image)
+        self.ui.cbox_box_color.currentIndexChanged.connect(self.change_box_color)
 
     def _block_signals(func):
         @functools.wraps(func)
@@ -103,6 +107,11 @@ class MainWindow(qtw.QMainWindow):
     def _setCurrentIndex_no_signal(widget, i :int):
         widget.setCurrentIndex(i)
 
+    @staticmethod
+    @_block_signals
+    def _setCurrentRow_no_signal(widget, i :int):
+        widget.setCurrentRow(i)
+
     # --------------------------------------------------------------
     # Buttons
     # --------------------------------------------------------------
@@ -114,6 +123,8 @@ class MainWindow(qtw.QMainWindow):
         directory = qfd.getExistingDirectory(self, "Select Directory", options=options)
         if directory:
             print("Selected Directory:", directory)
+        else:
+            return
         self.imgdir = directory
         self.ui.ledit_image_dir.setText(directory)
         files :list[str] = []
@@ -126,6 +137,7 @@ class MainWindow(qtw.QMainWindow):
             filename = file[i+1:]
             self.ui.lstw_files.addItem(filename)
         self.load_image_and_annotations(files[0])
+        self._setCurrentRow_no_signal(self.ui.lstw_files, 0)
 
     def load_next_image(self):
         if len(self.files) == 0:
@@ -135,6 +147,7 @@ class MainWindow(qtw.QMainWindow):
         self.filesi = self.filesi + 1
         self.save_annotations()
         self.load_image_and_annotations(self.files[self.filesi])
+        self._setCurrentRow_no_signal(self.ui.lstw_files, self.filesi)
 
     def load_prev_image(self):
         if len(self.files) == 0:
@@ -144,6 +157,14 @@ class MainWindow(qtw.QMainWindow):
         self.filesi = self.filesi - 1
         self.save_annotations()
         self.load_image_and_annotations(self.files[self.filesi])
+        self._setCurrentRow_no_signal(self.ui.lstw_files, self.filesi)
+
+    @qtc.pyqtSlot(qtw.QListWidgetItem)
+    def load_clicked_image(self, item: qtw.QListWidgetItem):
+        lstw = item.listWidget()
+        self.filesi = lstw.currentIndex().row()
+        self.save_annotations()
+        self.load_image_and_annotations(self.files[self.filesi])
 
     def load_image_and_annotations(self, imgpath: str):
         img = cv2.imread(imgpath)
@@ -151,6 +172,7 @@ class MainWindow(qtw.QMainWindow):
             print(f'Failed to load file {imgpath}')
             return
         h, w, _ = img.shape
+        self.ui.lbl_resolution.setText(f'{w} x {h}')
         self.sample = Sample(imgpath, w, h)
         self.sample.classes = self.classes
         self.update_sample_displays()
@@ -168,6 +190,8 @@ class MainWindow(qtw.QMainWindow):
     @qtc.pyqtSlot()
     def load_classes_file(self):
         path, _ = qtw.QFileDialog.getOpenFileName(self, 'Select classes file', os.curdir, '*.txt')
+        if not path:
+            return
         self.classes_file = path
         self.classes = []
         line :str
@@ -193,6 +217,10 @@ class MainWindow(qtw.QMainWindow):
         with open(stxt, 'w') as txt:
             txt.writelines(self.sample.bboxes2lines())
         self.xlog(f'Saved annotations to {stxt}', logging.INFO)
+
+    def change_box_color(self, x):
+        txt = self.ui.cbox_box_color.currentText()
+        self.display.color = self.colors[txt]
 
     # --------------------------------------------------------------
     # Display Loop
