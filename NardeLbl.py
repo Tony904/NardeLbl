@@ -9,8 +9,8 @@ import os
 import functools
 import logging
 from NardeLbl_designer import Ui_MainWindow as UiMain
-from display import *
-from sample import *
+from display import Display
+from sample import Sample
 
 
 logging.basicConfig(filename='nardelbl.log', level=logging.DEBUG)

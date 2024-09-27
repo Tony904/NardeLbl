@@ -63,7 +63,6 @@ class Display(qtc.QObject):
         self.transform: tuple[int, int, int, int, int, int, float] = (100, 100, 0, 100, 0, 100, 1.)
         self.display_in_focus = False
         self.sgl_do_display.connect(self._do_display, type=qtc.Qt.ConnectionType.QueuedConnection)
-        self.sgl_did_display.connect(self._do_display, type=qtc.Qt.ConnectionType.QueuedConnection)
 
     def _wheelEvent(self, event: qtg.QWheelEvent):
         delta = event.angleDelta().y()
@@ -137,13 +136,18 @@ class Display(qtc.QObject):
         self.keyPressed = True
 
     def _do_display(self):
-        transform = self._calculate_transform_and_set_scrollbars()
+        if self.src is None:
+            self.sgl_do_display.emit()
+            return
+        src = self.src.copy()
+        transform = self._calculate_transform_and_set_scrollbars(src)
         self.transform = transform
-        img = self._transform_src_image(transform)
+        img = self._transform_src_image(src, transform)
         img = self._draw_boxes(img, transform)
         qimg = qtg.QImage(img.data, img.shape[1], img.shape[0], img.strides[0], qtg.QImage.Format.Format_BGR888)
         qpix = qtg.QPixmap.fromImage(qimg)
         self.sgl_did_display.emit(qpix)
+        self.sgl_do_display.emit()
 
     def _draw_boxes(self, img: np.ndarray, transform: tuple[int, int, int, int, int, int, float]) -> np.ndarray:
         precrop_h, precrop_w, y1, y2, x1, x2, scale = transform
@@ -336,8 +340,8 @@ class Display(qtc.QObject):
             return False
         return True
     
-    def _calculate_transform_and_set_scrollbars(self) -> tuple[int, int, int, int, int, int, float]:
-        h, w, _ = self.src.shape
+    def _calculate_transform_and_set_scrollbars(self, src: np.ndarray) -> tuple[int, int, int, int, int, int, float]:
+        h, w, _ = src.shape
         wheeldelta = self.wheeldelta
         self.wheeldelta = 0
         wheelMag = 25
@@ -379,14 +383,14 @@ class Display(qtc.QObject):
         x2: int = x1 + min(canvas_w, scaled_w)
         return scaled_h, scaled_w, y1, y2, x1, x2, scale
 
-    def _transform_src_image(self, transform: tuple[int, int, int, int, int, int, float]) -> np.ndarray:
+    def _transform_src_image(self, src: np.ndarray, transform: tuple[int, int, int, int, int, int, float]) -> np.ndarray:
         scaled_h, scaled_w, y1, y2, x1, x2, scale = transform
-        img = cv2.resize(self.src, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
-        return img[y1:y2, x1:x2].copy()
+        img = cv2.resize(src, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
+        return img[y1:y2, x1:x2]
     
     @qtc.pyqtSlot(np.ndarray, Sample)
     def set_src_and_sample(self, src :np.ndarray, sample :Sample):
-        self.src = src
+        self.src = src.copy()
         self.sample = sample
         self._do_display()
 
