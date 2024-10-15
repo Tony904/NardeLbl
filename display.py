@@ -386,7 +386,7 @@ class Display(qtc.QObject):
     def _transform_src_image(self, src: np.ndarray, transform: tuple[int, int, int, int, int, int, float]) -> np.ndarray:
         scaled_h, scaled_w, y1, y2, x1, x2, scale = transform
         img = cv2.resize(src, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
-        return img[y1:y2, x1:x2]
+        return img[y1:y2, x1:x2].copy()
     
     @qtc.pyqtSlot(np.ndarray, Sample)
     def set_src_and_sample(self, src :np.ndarray, sample :Sample):
