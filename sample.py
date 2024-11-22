@@ -171,6 +171,7 @@ class BBox(qtc.QObject):
 
 
 class Sample(qtc.QObject):
+    sgl_selection_changed = qtc.pyqtSignal(int)
 
     def __init__(self, filepath: str, imgw :int, imgh :int, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -185,7 +186,7 @@ class Sample(qtc.QObject):
             print(f'No annotations file found for {filepath}')
         self._selected_bbox :BBox = None
         self.vertex_grab_radius = 10
-        self.box_grab_percent :float = 0.5
+        self.box_grab_percent :float = 0.25
         self.last_w = 0.05
         self.last_h = 0.05
         self.classes = []
@@ -283,6 +284,11 @@ class Sample(qtc.QObject):
         bbox._selected = True
         self.last_w = bbox.w
         self.last_h = bbox.h
+        self.sgl_selection_changed.emit(bbox.lbl)
+
+    def set_selected_index(self, i :int):
+        bbox = self.bboxes[i]
+        self.set_selected(bbox)
 
     def delete_selected(self):
         if not self.bbox_selected:

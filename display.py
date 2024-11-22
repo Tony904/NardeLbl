@@ -16,7 +16,6 @@ class Display(qtc.QObject):
     sgl_bbox_updated = qtc.pyqtSignal()
     sgl_display_in_focus = qtc.pyqtSignal()
     sgl_display_out_focus = qtc.pyqtSignal()
-    sgl_selection_changed = qtc.pyqtSignal(int)
 
     def __init__(self, lbl: qtw.QLabel, slider: qtw.QSlider, hzsb: qtw.QScrollBar, vtsb: qtw.QScrollBar, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -38,6 +37,8 @@ class Display(qtc.QObject):
         self.click_coords = None  # (mouse x, mouse y)
         self.right_clicked = False
         self.right_click_held = False
+        self.right_click_released = False
+        self.skip_deselect = False
         self.cursorX = 0
         self.cursorY = 0
         self.cursorXdelta = 0
@@ -86,6 +87,7 @@ class Display(qtc.QObject):
             self.click_coords = None
             self.right_clicked = True
             self.right_click_held = True
+            self.skip_deselect = False
             self.xlog(f'click_coords set to None.')
             return
         
@@ -93,6 +95,7 @@ class Display(qtc.QObject):
         if event.button() == qtc.Qt.MouseButton.RightButton:
             print('Right mouse released.')
             self.right_click_held = False
+            self.right_click_released = True
             self.cursorXdelta = 0
             self.cursorYdelta = 0
 
@@ -100,6 +103,7 @@ class Display(qtc.QObject):
         x = event.pos().x()
         y = event.pos().y()
         if self.right_click_held:
+            self.skip_deselect = True
             self.cursorXdelta = x - self.cursorX
             self.cursorYdelta = y - self.cursorY
         self.cursorX = x
@@ -166,12 +170,13 @@ class Display(qtc.QObject):
             clickY = self.click_coords[1]
             adjustedClickX = round((clickX + x1) / scale)
             adjustedClickY = round((clickY + y1) / scale)
-        if self.right_clicked:
-            self.sample.deselect()
-            self.states.dragging_box = False
-            self.states.dragging_vertex = False
-            self.states.box_selected = False
-            self.lbl.setCursor(qtc.Qt.CursorShape.ArrowCursor)
+        if self.right_click_released:
+            if not self.skip_deselect:
+                self.sample.deselect()
+                self.states.dragging_box = False
+                self.states.dragging_vertex = False
+                self.states.box_selected = False
+                self.lbl.setCursor(qtc.Qt.CursorShape.ArrowCursor)
         if self.delete_selected:
             self.sample.delete_selected()
             self.delete_selected = False
@@ -261,13 +266,12 @@ class Display(qtc.QObject):
                                 self.states.hovering_over_vertex = False
             elif not self.sample.bbox_selected:
                 if left_clicked:
-                    if left < clickX:
-                        if right > clickX:
-                            if top < clickY:
-                                if bottom > clickY:
+                    if left + w * 0.25 < clickX:
+                        if right - 2 * 0.25> clickX:
+                            if top + h * 0.25 < clickY:
+                                if bottom - h * 0.25 > clickY:
                                     box_clicked = True
                                     self.sample.set_selected(bbox)
-                                    self.sgl_selection_changed.emit(bbox.lbl)
             if bbox.selected:
                 color = (0, 255, 0)  # green
             else:
@@ -278,6 +282,7 @@ class Display(qtc.QObject):
         if changed:
             self.sgl_bbox_updated.emit()
         self.right_clicked = False
+        self.right_click_released = False
         self.click_coords = None
         return img
     
@@ -324,12 +329,12 @@ class Display(qtc.QObject):
             return False
         x = point[0]
         y = point[1]
-        grabw = self.sample.box_grab_percent * (right - left)
-        grabh = self.sample.box_grab_percent * (bottom - top)
-        grabLeft = left + grabw / 2
-        grabTop = top + grabh / 2
-        grabRight = right - grabw / 2
-        grabBottom = bottom - grabh / 2
+        w_offset = ((right - left) / 2) * (1. - self.sample.box_grab_percent)
+        h_offset = ((bottom - top) / 2) * (1. - self.sample.box_grab_percent)
+        grabLeft = left + w_offset
+        grabTop = top + h_offset
+        grabRight = right - w_offset
+        grabBottom = bottom - h_offset
         if x < grabLeft:
             return False
         if x > grabRight:
@@ -369,13 +374,15 @@ class Display(qtc.QObject):
             self.vtsb.setMaximum(newVtMax)
         elif scale_changed:
             self.vtsb.setMaximum(newVtMax)
-            self.vtsb.setValue(round(newVtMax * vsbRatio))
+            # self.vtsb.setValue(round(newVtMax * vsbRatio))
+            self.vtsb.setValue(int(newVtMax * vsbRatio))
         if self.hzsb.value() > newHzMax:
             self.hzsb.setValue(newHzMax)
             self.hzsb.setMaximum(newHzMax)
         elif scale_changed:
             self.hzsb.setMaximum(newHzMax)
-            self.hzsb.setValue(round(newHzMax * hsbRatio))
+            # self.hzsb.setValue(round(newHzMax * hsbRatio))
+            self.hzsb.setValue(int(newHzMax * hsbRatio))
         self.scale = scale
         y1: int = self.vtsb.value()
         x1: int = self.hzsb.value()
@@ -385,14 +392,20 @@ class Display(qtc.QObject):
 
     def _transform_src_image(self, src: np.ndarray, transform: tuple[int, int, int, int, int, int, float]) -> np.ndarray:
         scaled_h, scaled_w, y1, y2, x1, x2, scale = transform
-        img = cv2.resize(src, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
-        return img[y1:y2, x1:x2].copy()
+        # img = cv2.resize(src, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
+        # return img[y1:y2, x1:x2].copy()
+        img = src[int(y1/scale):int(y2/scale),int(x1/scale):int(x2/scale)]
+        return cv2.resize(img, (x2 - x1, y2 - y1), interpolation=cv2.INTER_LINEAR)
     
     @qtc.pyqtSlot(np.ndarray, Sample)
     def set_src_and_sample(self, src :np.ndarray, sample :Sample):
         self.src = src.copy()
         self.sample = sample
         self._do_display()
+
+    @qtc.pyqtSlot(int)
+    def select_box(self, i :int):
+        self.sample.set_selected_index(i)
 
     def xlog(self, msg: str, level: int = logging.DEBUG):
         if level > logging.DEBUG:

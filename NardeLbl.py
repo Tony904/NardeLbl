@@ -26,6 +26,7 @@ class MainApp(qtw.QApplication):
 
 class MainWindow(qtw.QMainWindow):
     sgl_update_src = qtc.pyqtSignal(np.ndarray, Sample)
+    sgl_select_box = qtc.pyqtSignal(int)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -42,6 +43,7 @@ class MainWindow(qtw.QMainWindow):
         self.files = []
         self.filesi = 0
         self.classes = []
+        self.classes_file = None
         self.sample :Sample = None
         self.selected_class = ''
         self.imgdir = ''
@@ -73,48 +75,17 @@ class MainWindow(qtw.QMainWindow):
         self.display.sgl_display_in_focus.connect(self.on_display_in_focus)
         self.display.sgl_display_out_focus.connect(self.on_display_out_focus)
         self.ui.cbox_class.currentIndexChanged.connect(self.on_class_changed)
-        self.display.sgl_selection_changed.connect(self.on_selection_changed)
         self.ui.btn_next_file.clicked.connect(self.load_next_image)
         self.ui.btn_prev_file.clicked.connect(self.load_prev_image)
         self.ui.lstw_files.itemClicked.connect(self.load_clicked_image)
+        self.ui.lstw_bboxes.itemClicked.connect(self.select_bbox_from_lstw)
         self.ui.cbox_box_color.currentIndexChanged.connect(self.change_box_color)
-
-    def _block_signals(func):
-        @functools.wraps(func)
-        def wrapper(*args):
-            args[0].blockSignals(True)
-            func(*args)
-            args[0].blockSignals(False)
-        return wrapper
-
-    @staticmethod
-    @_block_signals
-    def _setValue_no_signal(widget, value):
-        widget.setValue(value)
-
-    @staticmethod
-    @_block_signals
-    def _setChecked_no_signal(widget, state: int):
-        widget.setChecked(state)
-
-    @staticmethod
-    @_block_signals
-    def _setText_no_signal(widget, text):
-        widget.setText(str(text))
-
-    @staticmethod
-    @_block_signals
-    def _setCurrentIndex_no_signal(widget, i :int):
-        widget.setCurrentIndex(i)
-
-    @staticmethod
-    @_block_signals
-    def _setCurrentRow_no_signal(widget, i :int):
-        widget.setCurrentRow(i)
+        self.sgl_select_box.connect(self.display.select_box)
 
     # --------------------------------------------------------------
     # Buttons
     # --------------------------------------------------------------
+
     @qtc.pyqtSlot()
     def load_image_dir(self):
         qfd = qtw.QFileDialog()
@@ -136,8 +107,17 @@ class MainWindow(qtw.QMainWindow):
             i = file.rfind('\\')
             filename = file[i+1:]
             self.ui.lstw_files.addItem(filename)
+        if self.classes_file is None:
+            self.classes_file = self.search_for_classes_file(self.imgdir)
+            self._load_classes_file(self.classes_file)
         self.load_image_and_annotations(files[0])
         self._setCurrentRow_no_signal(self.ui.lstw_files, 0)
+    
+    def search_for_classes_file(self, dir):
+        lst = glob.glob(os.path.join(dir, 'classes.txt'))
+        if len(lst) == 0:
+            return None
+        return lst[0]
 
     def load_next_image(self):
         if len(self.files) == 0:
@@ -166,6 +146,12 @@ class MainWindow(qtw.QMainWindow):
         self.save_annotations()
         self.load_image_and_annotations(self.files[self.filesi])
 
+    @qtc.pyqtSlot(qtw.QListWidgetItem)
+    def select_bbox_from_lstw(self, item: qtw.QListWidgetItem):
+        lstw = item.listWidget()
+        i = lstw.currentIndex().row()
+        self.sgl_select_box.emit(i)
+
     def load_image_and_annotations(self, imgpath: str):
         img = cv2.imread(imgpath)
         if img is None:
@@ -173,7 +159,10 @@ class MainWindow(qtw.QMainWindow):
             return
         h, w, _ = img.shape
         self.ui.lbl_resolution.setText(f'{w} x {h}')
+        if self.sample is not None:
+            self.sample.sgl_selection_changed.disconnect()
         self.sample = Sample(imgpath, w, h)
+        self.sample.sgl_selection_changed.connect(self.on_selection_changed)
         self.sample.classes = self.classes
         self.update_sample_displays()
         self.sgl_update_src.emit(img, self.sample)
@@ -190,6 +179,9 @@ class MainWindow(qtw.QMainWindow):
     @qtc.pyqtSlot()
     def load_classes_file(self):
         path, _ = qtw.QFileDialog.getOpenFileName(self, 'Select classes file', os.curdir, '*.txt')
+        self._load_classes_file(path)
+    
+    def _load_classes_file(self, path):
         if not path:
             return
         self.classes_file = path
@@ -258,6 +250,43 @@ class MainWindow(qtw.QMainWindow):
     def on_selection_changed(self, i):
         self._setCurrentIndex_no_signal(self.ui.cbox_class, i)
         self.update_sample_displays()
+
+    # --------------------------------------------------------------
+    # Signal blockers
+    # --------------------------------------------------------------
+
+    def _block_signals(func):
+        @functools.wraps(func)
+        def wrapper(*args):
+            args[0].blockSignals(True)
+            func(*args)
+            args[0].blockSignals(False)
+        return wrapper
+
+    @staticmethod
+    @_block_signals
+    def _setValue_no_signal(widget, value):
+        widget.setValue(value)
+
+    @staticmethod
+    @_block_signals
+    def _setChecked_no_signal(widget, state: int):
+        widget.setChecked(state)
+
+    @staticmethod
+    @_block_signals
+    def _setText_no_signal(widget, text):
+        widget.setText(str(text))
+
+    @staticmethod
+    @_block_signals
+    def _setCurrentIndex_no_signal(widget, i :int):
+        widget.setCurrentIndex(i)
+
+    @staticmethod
+    @_block_signals
+    def _setCurrentRow_no_signal(widget, i :int):
+        widget.setCurrentRow(i)
 
     # --------------------------------------------------------------
     # Logging & Console
