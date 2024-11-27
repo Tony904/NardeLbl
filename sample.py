@@ -190,6 +190,7 @@ class Sample(qtc.QObject):
         self.last_w = 0.05
         self.last_h = 0.05
         self.classes = []
+        self.class_colors = [(255, 0, 0), (0, 255, 255), (0, 0, 255), (255, 255, 0)]  # temporary for current dataset 11-25-24
         self._selected_class = 0
 
     @property
@@ -219,7 +220,6 @@ class Sample(qtc.QObject):
         self.set_selected(bbox)
         print(f'BBox added. {cx} {cy} {rel_w} {rel_h}')
         return bbox
-
 
     @property
     def bbox_selected(self):
@@ -289,6 +289,15 @@ class Sample(qtc.QObject):
     def set_selected_index(self, i :int):
         bbox = self.bboxes[i]
         self.set_selected(bbox)
+
+    def get_selected_index(self):
+        i = 0
+        bbox :BBox
+        for bbox in self.bboxes:
+            if bbox._selected:
+                return i
+            i+=1
+        return -1
 
     def delete_selected(self):
         if not self.bbox_selected:

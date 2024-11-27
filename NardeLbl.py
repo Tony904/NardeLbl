@@ -175,6 +175,10 @@ class MainWindow(qtw.QMainWindow):
         if lst is None:
             return
         self.ui.lstw_bboxes.addItems(lst)
+        i = self.sample.get_selected_index()
+        if i >= 0:
+            self._setCurrentRow_no_signal(self.ui.lstw_bboxes, i)
+        self.ui.lbl_display.setFocus()
 
     @qtc.pyqtSlot()
     def load_classes_file(self):
@@ -282,6 +286,13 @@ class MainWindow(qtw.QMainWindow):
     @_block_signals
     def _setCurrentIndex_no_signal(widget, i :int):
         widget.setCurrentIndex(i)
+
+    @staticmethod
+    @_block_signals
+    def _setCurrentIndex_QModelIndex_no_signal(widget, i :int):
+        qi = qtc.QModelIndex()
+        qi.data = i
+        widget.setCurrentIndex(qi)
 
     @staticmethod
     @_block_signals

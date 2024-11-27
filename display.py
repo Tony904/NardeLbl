@@ -181,6 +181,7 @@ class Display(qtc.QObject):
             self.sample.delete_selected()
             self.delete_selected = False
             self.lbl.setCursor(qtc.Qt.CursorShape.ArrowCursor)
+            changed = True
         if self.copy_box:
             if not self.sample.bbox_selected:
                 cx = adjustedCurX / self.sample.imgw
@@ -275,7 +276,7 @@ class Display(qtc.QObject):
             if bbox.selected:
                 color = (0, 255, 0)  # green
             else:
-                color = self.color
+                color = self.sample.class_colors[bbox.lbl]
             cv2.rectangle(img, (left, top), (right, bottom), color, rect_thickness)
             if box_clicked:
                 self.xlog(f'Box selected: {self.sample.selected_bbox.lbl} (mouse x, y = {clickX}, {clickY})')
