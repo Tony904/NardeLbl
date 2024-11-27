@@ -10,12 +10,13 @@ from sample import Sample, BBox
 
 
 class Display(qtc.QObject):
-    sgl_did_display = qtc.pyqtSignal(qtg.QPixmap)
+    sgl_did_display = qtc.pyqtSignal(np.ndarray)
     sgl_do_display = qtc.pyqtSignal()
     sgl_msg = qtc.pyqtSignal(str)
     sgl_bbox_updated = qtc.pyqtSignal()
     sgl_display_in_focus = qtc.pyqtSignal()
     sgl_display_out_focus = qtc.pyqtSignal()
+    sgl_src_updated = qtc.pyqtSignal()
 
     def __init__(self, lbl: qtw.QLabel, slider: qtw.QSlider, hzsb: qtw.QScrollBar, vtsb: qtw.QScrollBar, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -24,7 +25,7 @@ class Display(qtc.QObject):
         self.xlog_quiet = False
 
         self.ndarray_dtype = np.uint8
-        self.sample :Sample
+        self.sample = None
         self.src: np.ndarray = np.zeros((100, 100, 3), self.ndarray_dtype)
         self.lbl :qtw.QLabel = lbl
         self.lbl.mousePressEvent = self._mousePressEvent
@@ -64,6 +65,7 @@ class Display(qtc.QObject):
         self.transform: tuple[int, int, int, int, int, int, float] = (100, 100, 0, 100, 0, 100, 1.)
         self.display_in_focus = False
         self.sgl_do_display.connect(self._do_display, type=qtc.Qt.ConnectionType.QueuedConnection)
+        self.looping = False
 
     def _wheelEvent(self, event: qtg.QWheelEvent):
         delta = event.angleDelta().y()
@@ -148,9 +150,7 @@ class Display(qtc.QObject):
         self.transform = transform
         img = self._transform_src_image(src, transform)
         img = self._draw_boxes(img, transform)
-        qimg = qtg.QImage(img.data, img.shape[1], img.shape[0], img.strides[0], qtg.QImage.Format.Format_BGR888)
-        qpix = qtg.QPixmap.fromImage(qimg)
-        self.sgl_did_display.emit(qpix)
+        self.sgl_did_display.emit(img)
         self.sgl_do_display.emit()
 
     def _draw_boxes(self, img: np.ndarray, transform: tuple[int, int, int, int, int, int, float]) -> np.ndarray:
@@ -398,11 +398,17 @@ class Display(qtc.QObject):
         img = src[int(y1/scale):int(y2/scale),int(x1/scale):int(x2/scale)]
         return cv2.resize(img, (x2 - x1, y2 - y1), interpolation=cv2.INTER_LINEAR)
     
-    @qtc.pyqtSlot(np.ndarray, Sample)
-    def set_src_and_sample(self, src :np.ndarray, sample :Sample):
-        self.src = src.copy()
-        self.sample = sample
-        self._do_display()
+    @qtc.pyqtSlot(Sample)
+    def set_src_and_sample(self, sample :Sample):
+        self.src = cv2.imread(sample.path)
+        if self.sample is None:
+            self.sample = sample
+        self.sample.reinitialize_vars()
+        self.sample.load_bboxes()
+        if not self.looping:
+            self.looping = True
+            self._do_display()
+        self.sgl_src_updated.emit()
 
     @qtc.pyqtSlot(int)
     def select_box(self, i :int):

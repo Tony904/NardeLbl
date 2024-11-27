@@ -2,6 +2,7 @@ from PyQt6 import QtCore as qtc
 from PyQt6 import QtGui as qtg
 from PyQt6 import QtWidgets as qtw
 import os
+import cv2
 
 
 class BBox(qtc.QObject):
@@ -89,7 +90,7 @@ class BBox(qtc.QObject):
         retYstr = ystr
         # print(f'\nxstr = {xstr} ystr = {ystr}')
         # print(f'left = {self.left} right = {self.right} top = {self.top} bottom = {self.bottom}')
-        if xstr is 'left':
+        if xstr == 'left':
             if abs(x - self.right) > 1:
                 if x > self.right:
                     self.left = self.right
@@ -97,7 +98,7 @@ class BBox(qtc.QObject):
                     retXstr = 'right'
                 else:
                     self.left = x
-        elif xstr is 'right':
+        elif xstr == 'right':
             if abs(x - self.left) > 1:
                 if x < self.left:
                     self.right = self.left
@@ -105,7 +106,7 @@ class BBox(qtc.QObject):
                     retXstr = 'left'
                 else:
                     self.right = x
-        if ystr is 'top':
+        if ystr == 'top':
             if abs(y - self.bottom) > 1:
                 if y > self.bottom:
                     self.top = self.bottom
@@ -113,7 +114,7 @@ class BBox(qtc.QObject):
                     retYstr = 'bottom'
                 else:
                     self.top = y
-        elif ystr is 'bottom':
+        elif ystr == 'bottom':
             if abs(y - self.top) > 1:
                 if y < self.top:
                     self.bottom = self.top
@@ -173,17 +174,13 @@ class BBox(qtc.QObject):
 class Sample(qtc.QObject):
     sgl_selection_changed = qtc.pyqtSignal(int)
 
-    def __init__(self, filepath: str, imgw :int, imgh :int, *args, **kwargs):
+    def __init__(self, imgpath: str = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.path = filepath
+        self.path = imgpath
         self.bboxes :list[BBox] = []
-        self.imgw = imgw
-        self.imgh = imgh
-        if os.path.exists(self.txtpath()):
+        if imgpath is not None:
+            self.get_img_dims()
             self.load_bboxes()
-            print(f'Successfully loaded annotations for {filepath}')
-        else:
-            print(f'No annotations file found for {filepath}')
         self._selected_bbox :BBox = None
         self.vertex_grab_radius = 10
         self.box_grab_percent :float = 0.25
@@ -192,6 +189,17 @@ class Sample(qtc.QObject):
         self.classes = []
         self.class_colors = [(255, 0, 0), (0, 255, 255), (0, 0, 255), (255, 255, 0)]  # temporary for current dataset 11-25-24
         self._selected_class = 0
+
+    def reinitialize_vars(self):
+        self._selected_bbox = None
+        self.last_w = 0.05
+        self.last_h = 0.05
+        self._selected_class = 0
+
+    def get_img_dims(self):
+        img = cv2.imread(self.path)
+        self.imgw = img.shape[1]
+        self.imgh = img.shape[0]
 
     @property
     def selected_class(self):
@@ -250,15 +258,19 @@ class Sample(qtc.QObject):
         return lines
 
     def load_bboxes(self):
-        lines = []
-        self.bboxes = []
-        with open(self.txtpath(), 'r') as txt:
-            lines = txt.readlines()
-        for line in lines:
-            if line != '' and len(line) != 0:
-                bbox = BBox(self.imgw, self.imgh)
-                bbox.parse_yolo_line(line)
-                self.bboxes.append(bbox)
+        if os.path.exists(self.txtpath()):
+            print(f'Successfully loaded annotations for {self.path}')
+            lines = []
+            self.bboxes = []
+            with open(self.txtpath(), 'r') as txt:
+                lines = txt.readlines()
+            for line in lines:
+                if line != '' and len(line) != 0:
+                    bbox = BBox(self.imgw, self.imgh)
+                    bbox.parse_yolo_line(line)
+                    self.bboxes.append(bbox)
+        else:
+            print(f'No annotations file found for {self.path}')
 
     def get_lstw_list(self):
         if len(self.bboxes) == 0:

@@ -25,7 +25,7 @@ class MainApp(qtw.QApplication):
 
 
 class MainWindow(qtw.QMainWindow):
-    sgl_update_src = qtc.pyqtSignal(np.ndarray, Sample)
+    sgl_update_src = qtc.pyqtSignal(Sample)
     sgl_select_box = qtc.pyqtSignal(int)
 
     def __init__(self, *args, **kwargs):
@@ -81,6 +81,7 @@ class MainWindow(qtw.QMainWindow):
         self.ui.lstw_bboxes.itemClicked.connect(self.select_bbox_from_lstw)
         self.ui.cbox_box_color.currentIndexChanged.connect(self.change_box_color)
         self.sgl_select_box.connect(self.display.select_box)
+        self.display.sgl_src_updated.connect(self.update_sample_displays)
 
     # --------------------------------------------------------------
     # Buttons
@@ -159,13 +160,13 @@ class MainWindow(qtw.QMainWindow):
             return
         h, w, _ = img.shape
         self.ui.lbl_resolution.setText(f'{w} x {h}')
-        if self.sample is not None:
-            self.sample.sgl_selection_changed.disconnect()
-        self.sample = Sample(imgpath, w, h)
-        self.sample.sgl_selection_changed.connect(self.on_selection_changed)
-        self.sample.classes = self.classes
-        self.update_sample_displays()
-        self.sgl_update_src.emit(img, self.sample)
+        if self.sample is None:
+            self.sample = Sample(imgpath)
+            self.sample.sgl_selection_changed.connect(self.on_selection_changed)
+            self.sample.classes = self.classes
+        else:
+            self.sample.path = imgpath
+        self.sgl_update_src.emit(self.sample)
 
     def update_sample_displays(self):
         self.ui.lstw_bboxes.clear()
@@ -221,9 +222,11 @@ class MainWindow(qtw.QMainWindow):
     # --------------------------------------------------------------
     # Display Loop
     # --------------------------------------------------------------
-    @qtc.pyqtSlot(qtg.QPixmap)
-    def update_display_pixmap(self, pixmap: qtg.QPixmap):
-        self.ui.lbl_display.setPixmap(pixmap)
+    @qtc.pyqtSlot(np.ndarray)
+    def update_display_pixmap(self, img :np.ndarray):
+        qimg = qtg.QImage(img.data, img.shape[1], img.shape[0], img.strides[0], qtg.QImage.Format.Format_BGR888)
+        qpix = qtg.QPixmap.fromImage(qimg)
+        self.ui.lbl_display.setPixmap(qpix)
 
     # --------------------------------------------------------------
     # Event callbacks
