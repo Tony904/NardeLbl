@@ -191,10 +191,12 @@ class Sample(qtc.QObject):
         self._selected_class = 0
 
     def reinitialize_vars(self):
+        self.deselect()
         self._selected_bbox = None
         self.last_w = 0.05
         self.last_h = 0.05
         self._selected_class = 0
+        self.bboxes = []
 
     def get_img_dims(self):
         img = cv2.imread(self.path)
@@ -211,13 +213,17 @@ class Sample(qtc.QObject):
         if self.bbox_selected:
             self.selected_bbox.lbl = x
 
-    def add_bbox(self, cx, cy, rel_w=None, rel_h=None):
+    def add_bbox(self, cx, cy, rel_w=None, rel_h=None, class_id=-1):
         if rel_w is None:
             rel_w = self.last_w
         if rel_h is None:
             rel_h = self.last_h
         bbox = BBox(self.imgw, self.imgh)
-        bbox.lbl = self.selected_class
+        if class_id < 0:
+            bbox.lbl = self.selected_class
+        else:
+            class_id = min(class_id, len(self.classes) - 1)
+            bbox.lbl = max(class_id, 0)
         bbox.cx = cx
         bbox.cy = cy
         bbox.w = rel_w
@@ -294,6 +300,7 @@ class Sample(qtc.QObject):
             self._selected_bbox._selected = False
         self._selected_bbox = bbox
         bbox._selected = True
+        self._selected_class = bbox.lbl
         self.last_w = bbox.w
         self.last_h = bbox.h
         self.sgl_selection_changed.emit(bbox.lbl)

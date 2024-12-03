@@ -54,6 +54,7 @@ class Display(qtc.QObject):
         self.keyNudge = [0, 0, 0, 0]  # left, top, right, bottom
         self.anchor = None
         self.copy_box = False
+        self.copy_class = -1
         self.time = time.time()
         self.copy_box_cooldown = 1
         self.delete_selected = False
@@ -111,13 +112,15 @@ class Display(qtc.QObject):
         self.cursorX = x
         self.cursorY = y
         
-
     def _keyPressEvent(self, event :qtg.QKeyEvent):
         print(f'Key pressed: {event.key()}')
-        if event.key() == qtc.Qt.Key.Key_T:
+        isnumkey = self.is_num_key(event.key())
+        print(f'isnumkey = {isnumkey}')
+        if event.key() == qtc.Qt.Key.Key_T or isnumkey > 0:
             t = time.time()
             if t - self.time > self.copy_box_cooldown:
                 self.copy_box = True
+                self.copy_class = isnumkey - 1
                 self.time = t
             else:
                 print(f'Box creation on cooldown. {t - self.time}')
@@ -140,6 +143,30 @@ class Display(qtc.QObject):
         elif event.key() == qtc.Qt.Key.Key_F:  # Inward Bottom
             self.keyNudge[3] = -1
         self.keyPressed = True
+
+    @staticmethod
+    def is_num_key(k :int):
+        if k == qtc.Qt.Key.Key_1:
+            return 1
+        if k == qtc.Qt.Key.Key_2:
+            return 2
+        if k == qtc.Qt.Key.Key_3:
+            return 3
+        if k == qtc.Qt.Key.Key_4:
+            return 4
+        if k == qtc.Qt.Key.Key_5:
+            return 5
+        if k == qtc.Qt.Key.Key_6:
+            return 6
+        if k == qtc.Qt.Key.Key_7:
+            return 7
+        if k == qtc.Qt.Key.Key_8:
+            return 8
+        if k == qtc.Qt.Key.Key_9:
+            return 9
+        if k == qtc.Qt.Key.Key_0:
+            return 10
+        return 0
 
     def _do_display(self):
         if self.src is None:
@@ -165,6 +192,7 @@ class Display(qtc.QObject):
         vertexStr = None
         changed = False
         left_clicked = self.click_coords is not None
+        box_grab_percent = self.sample.box_grab_percent
         if left_clicked:
             clickX = self.click_coords[0]
             clickY = self.click_coords[1]
@@ -186,7 +214,7 @@ class Display(qtc.QObject):
             if not self.sample.bbox_selected:
                 cx = adjustedCurX / self.sample.imgw
                 cy = adjustedCurY / self.sample.imgh
-                self.sample.add_bbox(cx, cy)
+                self.sample.add_bbox(cx, cy, class_id=self.copy_class)
                 changed = True
                 self.xlog('Created new box.', logging.INFO)
             else:
@@ -267,10 +295,10 @@ class Display(qtc.QObject):
                                 self.states.hovering_over_vertex = False
             elif not self.sample.bbox_selected:
                 if left_clicked:
-                    if left + w * 0.25 < clickX:
-                        if right - 2 * 0.25> clickX:
-                            if top + h * 0.25 < clickY:
-                                if bottom - h * 0.25 > clickY:
+                    if left + w * box_grab_percent < clickX:
+                        if right - w * box_grab_percent > clickX:
+                            if top + h * box_grab_percent < clickY:
+                                if bottom - h * box_grab_percent > clickY:
                                     box_clicked = True
                                     self.sample.set_selected(bbox)
             if bbox.selected:
